@@ -1,13 +1,58 @@
-# The network and the web server. Finish the TODOs, then write outputs.tf. See README.md.
+resource "aws_vpc" "main" {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_hostnames = true
+  tags                 = { Name = "akops-vpc" }
+}
 
-# TODO: aws_vpc "main" - 10.0.0.0/16, DNS hostnames on, a Name tag
+resource "aws_subnet" "public" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.1.0/24"
+  map_public_ip_on_launch = true
+}
 
-# TODO: aws_subnet "public" - in the VPC, 10.0.1.0/24, public IPs on launch
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.main.id
+}
 
-# TODO: aws_internet_gateway "igw" - in the VPC
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
+  }
+}
 
-# TODO: aws_route_table "public" (route 0.0.0.0/0 to the gateway) and aws_route_table_association "public"
+resource "aws_route_table_association" "public" {
+  subnet_id      = aws_subnet.public.id
+  route_table_id = aws_route_table.public.id
+}
 
-# TODO: aws_security_group "web" - 80 from anywhere, 22 only from var.my_ip, all outbound
+resource "aws_security_group" "web" {
+  vpc_id = aws_vpc.main.id
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.my_ip]
+  }
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
 
-# TODO: aws_instance "web" - var.ami_id, var.instance_type, in the subnet with the security group
+resource "aws_instance" "web" {
+  ami                    = var.ami_id
+  instance_type          = var.instance_type
+  subnet_id              = aws_subnet.public.id
+  vpc_security_group_ids = [aws_security_group.web.id]
+  tags                   = { Name = "akops-web" }
+}
